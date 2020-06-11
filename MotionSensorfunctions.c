@@ -11,10 +11,8 @@ int motion_sens = 0;
 int time[4] = {00,00,00,00};
 int range_used_time[4] = {00,00,00,00};// first item describe the number of people has used the toilet less than 2 mins 
 									   // second item describe the number of people has used the toilet 2 mins or less than 4. And so On 
-
 char time_string[12];
 char used_time_string[12];
-//char chosen_characters[16];
 int counter_for_timeout = 0;
 int counter_for_sleep = 0;
 int counter =0;
@@ -31,22 +29,31 @@ int display_length = 0;
 int character_number_busy = 0;
 int character_number_empty = 0;
 int check=0;
+int init=1;
+
+//variables for extra functions(cleaning times)
+char cleaningTimes[20][12];
+int buttonReleased = 0;
+int timesCleaned = 0;
+int displayCleanedIndex = 0;
+
+int displayCleanedIndexReleased = 0;
 
 /* Interrupt Service Routine */
 void user_isr( void ) // calls repeatdly in a specific time
 {
 	if (IFS(0) & 0x100)		//will enter the if-statment every 100ms 
 	{
-		counter_for_timeout++;
+		counter_for_timeout++;	//
 		allowCheckPage100ms(); // to call the string every 100 ms
-		if (counter_for_timeout>=10)	//
+		if (counter_for_timeout>=10)	//to check every sec (10 times calling the 100 ms = 1000 ms = 1 sec ) (For time counting.)
 		{
 			checkPage();
 			timeCounter();
 			counter_for_timeout =0;
 			usedTime();
 		}
-		IFSCLR(0)=0x100;
+		IFSCLR(0)=0x100;	//
 	}
 }
 void allowCheckPage100ms()// 
@@ -55,14 +62,40 @@ void allowCheckPage100ms()//
 	if (get_switches & 0x2){
 		
 	}
+	else if(get_switches & 0x1) {
+		checkPage();
+	}
 	else {
 		checkPage100ms();
 	}
 }
+
+void setupText() // The starting texts in the busy and empty field on the screen as a string in one row. [EMPTY], [BUSY].
+{
+	editable_text_empty[0]='E';
+	editable_text_empty[1]='M';
+	editable_text_empty[2]='P';
+	editable_text_empty[3]='T';
+	editable_text_empty[4]='Y';
+	editable_text_empty[5]=0x00;
+	
+	editable_text_busy[0]='B';
+	editable_text_busy[1]='U';
+	editable_text_busy[2]='S';
+	editable_text_busy[3]='Y';
+	editable_text_busy[4]=0x00;
+}
+
 void checkPage100ms(){ // call the changeText function every 100 ms.
-	if (PORTE ==0){
-		changeText(editable_text_empty, secondary_list_empty, character_number_empty); // calling function with passing parameters (empty)
-		display_string( 1,editable_text_empty);
+	if(init == 1)
+	{
+		setupText();
+		init=0;
+	}
+	
+	if (PORTE == 0){
+		changeText(editable_text_empty, secondary_list_empty, character_number_empty); 	// calling function with passing parameters (empty)
+		display_string(1, editable_text_empty);
 		display_update();
 		if (!check) // to let the character_number start from the begining once it changed the status and for switching for the second one
 		{
@@ -70,7 +103,8 @@ void checkPage100ms(){ // call the changeText function every 100 ms.
 			display_length=0; 
 		}
 	}
-	else if (PORTE == 1){ // calling function for busy situation when PORTE =1 (busy) 
+	
+	if (PORTE == 1){ // calling function for busy situation when PORTE =1 (busy) 
 		changeText(editable_text_busy, secondary_list_busy, character_number_busy);
 		display_string( 1,editable_text_busy);
 		display_update();
@@ -81,6 +115,7 @@ void checkPage100ms(){ // call the changeText function every 100 ms.
 		}
 	}
 }
+
 void usedTime() // the time the toilet has been used
 {
     if(PORTE==1)		//when the portE(led) is turned on increase the counter by 1 and turn off checking on port 
@@ -109,11 +144,14 @@ void usedTime() // the time the toilet has been used
 }
 int checkPage () // check which slides and button are on and if there is none, choose default
 {	
-	//int butns = getBtns();			//get buttons values
 	int get_switches = getsw();		//get switch value
 		if (get_switches & 0x2) // switch 2
 		{
 			switch2Page2();		//call switch2Page2
+		}
+		else if (get_switches & 0x1)
+		{
+			switch2Page3();
 		}
 		else 
 		{
@@ -135,15 +173,15 @@ void toStringDisplay (char* time_string_p, int* timep, char between) // convert 
 		else if (timep[i] > 9)
 		{
 			time_string_p[j++] = 48 + (timep[i]/10);
-			time_string_p[j++] = 48 + (timep[i]%10);
+			time_string_p[j++] = 48 + (timep[i]%10);		//tex. 15 = 15/10 = 1,5--> we have here 1, 15%10 = 1,(5)--> we have here 5 when we put them we get 15. 
 			time_string_p[j++] = between;
 		}
 	}
-	time_string_p[11] = 0;
-}
+	time_string_p[11] = 0;			//to write it as a string. 
+} 
 int switch2Page1() // what to do in page 1
 {
-	display_string( 0,"" );
+	display_string( 0,"" );			//
 	display_string( 2,"" );
 	display_string( 3,"" );
 	display_update();
@@ -155,8 +193,7 @@ int switch2Page1() // what to do in page 1
 	display_update();
 	motion_sens = PORTB & 0x2;	//
 	toStringDisplay(time_string, time, ':');
-	
-	
+	cleaningTimesFun();
 }
 
 int switch2Page2()// what to do in page 2
@@ -169,10 +206,49 @@ int switch2Page2()// what to do in page 2
 	display_string( 0,"PAGE 2" );
 	display_string( 1, "AVERAGE USAGE" );
 	display_string(2, "<2 <4 <6 6<");
-	display_string(3, used_time_string);	//disable the information from used_time_string
+	display_string(3, used_time_string);	//show the information from used_time_string in the 4th row of the display
 	display_update();
-	toStringDisplay(used_time_string, range_used_time, ' ');	//
+	toStringDisplay(used_time_string, range_used_time, ' ');
 }
+
+void changeDisplayIndex() // 
+{
+	int butns = getbtns();
+    if ((butns & 0x2) && (displayCleanedIndexReleased == 1))
+    {
+        displayCleanedIndexReleased = 0;
+		displayCleanedIndex++;										//to scroll up the list of cleaning times. 
+		
+    }
+	 if ((butns & 0x1) && (displayCleanedIndexReleased == 1))		
+    {
+        displayCleanedIndexReleased = 0;
+		displayCleanedIndex--;										//to scroll down the list of cleaning times. 
+		if(displayCleanedIndex <=0) displayCleanedIndex = 0;		//Dont scroll up when the index of array is less than 0.
+    }
+    if ((butns & 0xf) == 0)
+    {
+        displayCleanedIndexReleased = 1;
+    }
+}
+
+int switch2Page3()// what to do in page 3
+{
+	display_string( 0,"" );
+	display_string( 1,"" );
+	display_string( 2,"" );
+	display_string( 3,"" );
+	display_update();
+	display_string( 0,"PAGE 3" );
+	cleaningTimesFun();
+	changeDisplayIndex();
+	display_string(1,cleaningTimes[displayCleanedIndex]);
+	display_string(2,cleaningTimes[displayCleanedIndex+1]);
+	display_string(3,cleaningTimes[displayCleanedIndex+2]);
+	display_update();
+}
+
+
 char changeText(char* edit_character, int* temp_list, int character_number) // what to do in textChanging page instead of busy and available
 {
 	int butns = getbtns();	
@@ -184,16 +260,12 @@ char changeText(char* edit_character, int* temp_list, int character_number) // w
 			char_value++;
 			temp_list[display_length] = char_value;
 			changableString (edit_character, &char_value, temp_list); // call the fun and change in variables (char_value) value.
-			display_string( 1,edit_character );
-			display_update();
 		}
 		else if (butns & 0x2) // decrease the value of the char in ascii table
 		{
 			char_value--;
 			temp_list[display_length] = char_value;
 			changableString (edit_character, &char_value, temp_list);
-			display_string( 1,edit_character );
-			display_update();
 		}
 		else if (butns & 0x1) // jump to the next char in length
 		/* increase the index of character and increase charcter_number variable value to declare it as the number of characters in line 
@@ -208,8 +280,6 @@ char changeText(char* edit_character, int* temp_list, int character_number) // w
 			}
 			char_value = temp_list[display_length]; // save value of character values into a temporary list to save them and not reuse them in second character array.
 			changableString (edit_character, &char_value, temp_list); 
-			display_string( 1,edit_character );
-			display_update();
 		}
 		else if (butns & 0x8) // jump to the first previous char in length
 		/* decreasing the display_length decide which index will be changed and presented */
@@ -222,13 +292,11 @@ char changeText(char* edit_character, int* temp_list, int character_number) // w
 			}
 			char_value = temp_list[display_length];
 			changableString (edit_character, &char_value, temp_list);
-			display_string( 1,edit_character );
-			display_update();
 		}
 	}
 	else {display_length=0;} // to keep the default value of display_length;
 }
-void changableString (char* time_string_p, int* timep, int* temp_list) // convert time to string to show it on display
+void changableString (char* time_string_p, int* timep, int* temp_list) // Make the user be able to configure the displayed texts EMPTY and BUSY 
 {
 	if (*timep == 91 || *timep == 64){
 		*timep = 32;
@@ -286,6 +354,64 @@ int timeCounter() // count actual time
 		time[0]++;
 		time[1]=0;
 	}
+}
+
+//Karoline Extra Function (show last 20 times the bathroom has be cleaned)
+
+
+void shiftCleaningTimes()  	//shift the element of the array on step up.  
+{
+	int i=0;
+	int j=0;
+	for(i=0; i < 19; i++)
+	{
+		for(j=0; j < 11; j++)
+		{
+			cleaningTimes[i][j] = cleaningTimes[i+1][j];		//copying the time string from one element in the cleaningTimes array to the the before element. i = i+1;(so that we shift the array up).
+		}
+		cleaningTimes[i][11] = 0x00;	//to wrtie it as a string 
+	}
+	
+}
+
+void copyMemTime(int index)		//cope the cuurent time (time String) to the cleaningTimes array. 
+{
+	int i=0;
+	for(i=0;i<11;i++)
+	{
+		cleaningTimes[index][i]=time_string[i];	
+	}
+	cleaningTimes[index][11] = 0x00;			//to write it as a String 	
+}
+
+void addCleaningTime(int index)		//this fun check if the times of cleaning has been 20 or not.
+{
+	
+	if(index >= 20)					//if the times of cleaning has been 20: 
+	{
+		shiftCleaningTimes();		//call shiftCleaningTimes.
+		copyMemTime(19);			//19 because we want to fill the 19th place of the array.
+	}
+	else
+	{
+		copyMemTime(index);			//continue copying the time to our array. 
+	}
+}
+
+void cleaningTimesFun()//the buttonReleased is 0 in default so we go in the the else if (the button is not on so we change the buttonReleased to 1 to go in the if statment).
+{
+    int butns = getbtns();	//check the butns(use them)
+    if ((butns & 0x4) && (buttonReleased == 1))		//The button 0x4 should be pushed for one second to register the time_string in the list. 
+													//when we press the button one time it going into the if statment just one time and change the variable to 0(so we don't save the same time many times), 
+    {
+        buttonReleased = 0;							//change the variable to 0.
+		addCleaningTime(timesCleaned);				//timeCleaned is 0 in the begining. and call the function addCleaningTime.
+        timesCleaned++;								//and it increase by on every time we get into the if statment(every time they clean the toilet).
+    }
+    else if ((butns & 0x4) == 0)	//change the variable to 1 to get in at the if statment.
+    {
+        buttonReleased = 1;
+    }
 }
 
 void labinit( void ) // declare PORTS specifications

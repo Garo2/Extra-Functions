@@ -63,3 +63,5 @@ void changableString (char* time_string_p, int* timep, int* temp_list);
 char changeText(char* edit_character, int* temp_list, int character_number);
 void checkPage100ms();
 void allowCheckPage100ms();
+void cleaningTimesFun();
+int switch2Page3();
